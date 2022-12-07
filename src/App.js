@@ -1,10 +1,22 @@
-import { useEffect, useState } from "react";
+import { parse } from 'query-string';
+import withRouter from './hoc/withRouter';
+import { useEffect, useState } from 'react';
 
 import './styles.css';
 
+const formGrid = (height=0, width=0) => {
+  const formCells = Array.from({ length: width }, (el, idx) => idx.toString());
+  const formRows = Array.from({ length: height }, () => formCells);
+  return formRows;
+}
 
-export const App = () => {
-  const grid = [['First cell']];
+const App = ({ location }) => {
+  const [grid, setGrid] = useState([['First cell']]);
+  const { height = 0, width = 0 } = parse(location.search);
+  useEffect(() => {
+    const newGrid = formGrid(height, width);
+    setGrid(newGrid)
+  }, [height, width])
 
   return (
     <div>
@@ -35,3 +47,5 @@ export const App = () => {
     </div>
   );
 }
+
+export default withRouter(App);
