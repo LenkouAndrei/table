@@ -6,8 +6,11 @@ import useOutsideClick from './hooks/useOutsideClick'
 import './styles.css';
 
 const formGrid = (height=0, width=0) => {
-  const formCells = Array.from({ length: width }, () => ({ text: '', selected: false }));
-  const formRows = Array.from({ length: height }, () => formCells);
+  const formCells = (rowIdx) => Array.from({ length: width }, (_cell, cellIdx) => {
+    const text = `rows: ${rowIdx}, cells: ${cellIdx}`;
+    return { text, selected: false, colSpan: 1, rowSpan: 1 }
+  });
+  const formRows = Array.from({ length: height }, (_row, rowIdx) => formCells(rowIdx));
   return formRows;
 }
 
@@ -32,10 +35,21 @@ const recalculateGrid = (selectedRange) => (grid) => {
   return grid
     .map((rows, rowIdx) => {
       return rows.map((cellConfig, cellIdx) => {
-        console.log(rowIdx, cellIdx, isCellInSelectedRange(selectedRange, {rowIdx, cellIdx}));
         return { ...cellConfig, selected: isCellInSelectedRange(selectedRange, {rowIdx, cellIdx}) }
       })
     })
+}
+
+const isUnitedCell = (rowIdx, startRow, cellIdx, startCol) => rowIdx === startRow && cellIdx === startCol;
+const mergeCells = ({ startCol, endCol, startRow, endRow }) => (grid) => {
+  const cell = grid[startRow][startCol];
+  cell.colSpan = endCol - startCol + 1;
+  cell.rowSpan = endRow - startRow + 1;
+  const newGrid = grid.map(
+    (row, rowIdx) => row.filter((cell, cellIdx) => !cell.selected || isUnitedCell(rowIdx, startRow, cellIdx, startCol))
+  )
+  console.log('newGrid: ', JSON.parse(JSON.stringify(newGrid)))
+  return newGrid;
 }
 
 const App = ({ location }) => {
@@ -44,6 +58,7 @@ const App = ({ location }) => {
   const [hoveredCellDataset, setHoveredCellDataset] = useState(null);
   const [isListenMouseMove, setIsListenMouseMove] = useState(false);
   const [startSelectedPosition, setStartSelectedPosition] = useState(null);
+  // const [selectedRange, setSelectedRange] = useState();
   const ref = useRef();
   useOutsideClick(ref, () => setIsListenMouseMove(false))
   useEffect(() => {
@@ -51,11 +66,8 @@ const App = ({ location }) => {
     setGrid(newGrid)
   }, [height, width]);
   useEffect(() => {
-    // console.log('hoveredCellDataset: ', hoveredCellDataset);
-    // console.log('startSelectedPosition: ', startSelectedPosition);
     if (hoveredCellDataset) {
       const selectedRange = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
-      console.log('selectedRange: ', selectedRange);
       setGrid(recalculateGrid(selectedRange))
     }
   }, [hoveredCellDataset])
@@ -76,11 +88,21 @@ const App = ({ location }) => {
     setHoveredCellDataset(event.target.dataset);
   }
 
+  const onSeparateBtnClick = () => {
+    console.log('Separate Cells')
+  }
+  
+  const onMergeBtnClick = () => {
+    const selectedRange = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
+    setGrid(mergeCells(selectedRange));
+    console.log('selectedRange: ', selectedRange)
+  }
+
   return (
     <div>
       <div className='controls'>
-        <button data-merge-button>Merge</button>
-        <button data-separate-button>Separate</button>
+        <button data-merge-button onClick={onMergeBtnClick}>Merge</button>
+        <button data-separate-button onClick={onSeparateBtnClick}>Separate</button>
       </div>
       <table ref={ref}>
         <tbody>
@@ -92,8 +114,8 @@ const App = ({ location }) => {
                   data-row-index={rowIndex}
                   data-col-index={colIndex}
                   key={colIndex}
-                  colSpan={1}
-                  rowSpan={1}
+                  colSpan={gridCell.colSpan}
+                  rowSpan={gridCell.rowSpan}
                   onMouseDown={handleMousedown}
                   onMouseUp={handleMouseup}
                   onMouseMove={handleMouseMove}
