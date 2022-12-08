@@ -1,14 +1,15 @@
 import { parse } from 'query-string';
 import withRouter from './hoc/withRouter';
 import { useEffect, useState, useRef } from 'react';
-import useOutsideClick from './hooks/useOutsideClick'
+import useOutsideClick from './hooks/useOutsideClick';
+import cloneDeep from 'lodash.clonedeep';
+import { Cell } from './models/cell';
 
 import './styles.css';
 
 const formGrid = (height=0, width=0) => {
   const formCells = (rowIdx) => Array.from({ length: width }, (_cell, cellIdx) => {
-    const text = `rows: ${rowIdx}, cells: ${cellIdx}`;
-    return { text, selected: false, colSpan: 1, rowSpan: 1 }
+    return new Cell({ firstCell: cellIdx, firstRow: rowIdx });
   });
   const formRows = Array.from({ length: height }, (_row, rowIdx) => formCells(rowIdx));
   return formRows;
@@ -51,6 +52,20 @@ const mergeCells = ({ startCol, endCol, startRow, endRow }) => (grid) => {
   console.log('newGrid: ', JSON.parse(JSON.stringify(newGrid)))
   return newGrid;
 }
+////////////////////////////////////////////////////////////////////
+
+const getCellsInRange = ({ startCol, endCol, startRow, endRow }, grid) => {
+  return grid.reduce((acc, cells) => {
+    cells.forEach(cell => {
+      if (cell.isFullyInRange({ startCol, endCol, startRow, endRow })) {
+        acc.fullyInRange.push(cell)
+      } else if (cell.isPartiallyInRange({ startCol, endCol, startRow, endRow })) {
+        acc.partiallyInRange.push(cell)
+      }
+    });
+    return acc;
+  }, { fullyInRange: [], partiallyInRange: [] })
+}
 
 const App = ({ location }) => {
   const [grid, setGrid] = useState([['First cell']]);
@@ -67,8 +82,18 @@ const App = ({ location }) => {
   }, [height, width]);
   useEffect(() => {
     if (hoveredCellDataset) {
-      const selectedRange = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
-      setGrid(recalculateGrid(selectedRange))
+      const { startCol, endCol, startRow, endRow } = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
+      const newGrid = cloneDeep(grid);
+      newGrid.forEach(row => {
+        row.forEach(cell => cell.selected = false)
+      })
+      const { fullyInRange, partiallyInRange } = getCellsInRange({ startCol, endCol, startRow, endRow }, newGrid);
+      if (!partiallyInRange.length) {
+        fullyInRange.forEach(cell => cell.selected = true)
+        setGrid(newGrid)
+      }
+      // console.log(cellsInRange);
+      // setGrid(recalculateGrid(selectedRange))
     }
   }, [hoveredCellDataset])
 
