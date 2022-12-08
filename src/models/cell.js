@@ -6,6 +6,9 @@ export class Cell {
         this.selected = false;
         this.colSpan = 1;
         this.rowSpan = 1;
+        this.isVisible = true;
+        this.startRowPosition = firstRow;
+        this.startColPosition = firstCell;
     }
     toggleSelection() {
         this.selected = !this.selected;
@@ -24,17 +27,15 @@ export class Cell {
     changeHeight(height) {
         this.rowSpan = height;
     }
-    isCrossTopLine(cellBorder, top) {
-        return cellBorder.top < top && cellBorder.bottom > top;
+    isCrossTopLine(cellBorder, top, bottom) {
+        return cellBorder.top > top && cellBorder.top > bottom;
     }
-    isCrossBottomLine(cellBorder, bottom) {
-        return cellBorder.top < bottom && cellBorder.bottom > bottom;
+    isCrossLeftLine(cellBorder, left, right) {
+        return cellBorder.left > left && cellBorder.left < right;
     }
-    isCrossRightLine(cellBorder, right) {
-        return cellBorder.left < right && cellBorder.right > right;
-    }
-    isCrossLeftLine(cellBorder, left) {
-        return cellBorder.left < left && cellBorder.right > left;
+    isRangeInside(cellBorder, {top, bottom, right, left}) {
+        return cellBorder.top <= top && cellBorder.bottom >= bottom
+            && cellBorder.left <= left && cellBorder.right >= right;
     }
     isFullyInRange({ startCol: left, endCol: right, startRow: top, endRow: bottom }) {
         const cellBorder = this.getCellBorder();
@@ -43,9 +44,11 @@ export class Cell {
     }
     isPartiallyInRange({ startCol: left, endCol: right, startRow: top, endRow: bottom }) {
         const cellBorder = this.getCellBorder();
-        return this.isCrossTopLine(cellBorder, top)
-            || this.isCrossBottomLine(cellBorder, bottom)
-            || this.isCrossRightLine(cellBorder, right)
-            || this.isCrossLeftLine(cellBorder, left);
+        const isRangeLeftOfCell = right < cellBorder.left;
+        const isRangeRightOfCell = left > cellBorder.right;
+        const isRangeAboveCell = top > cellBorder.bottom;
+        const isRangeBelowCell = bottom < cellBorder.top;
+    
+        return !( isRangeLeftOfCell || isRangeRightOfCell || isRangeAboveCell || isRangeBelowCell );
     }
 }

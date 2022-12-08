@@ -49,7 +49,6 @@ const mergeCells = ({ startCol, endCol, startRow, endRow }) => (grid) => {
   const newGrid = grid.map(
     (row, rowIdx) => row.filter((cell, cellIdx) => !cell.selected || isUnitedCell(rowIdx, startRow, cellIdx, startCol))
   )
-  console.log('newGrid: ', JSON.parse(JSON.stringify(newGrid)))
   return newGrid;
 }
 ////////////////////////////////////////////////////////////////////
@@ -73,9 +72,9 @@ const App = ({ location }) => {
   const [hoveredCellDataset, setHoveredCellDataset] = useState(null);
   const [isListenMouseMove, setIsListenMouseMove] = useState(false);
   const [startSelectedPosition, setStartSelectedPosition] = useState(null);
-  // const [selectedRange, setSelectedRange] = useState();
   const ref = useRef();
   useOutsideClick(ref, () => setIsListenMouseMove(false))
+
   useEffect(() => {
     const newGrid = formGrid(height, width);
     setGrid(newGrid)
@@ -91,9 +90,21 @@ const App = ({ location }) => {
       if (!partiallyInRange.length) {
         fullyInRange.forEach(cell => cell.selected = true)
         setGrid(newGrid)
+      } else {
+        console.log('startedData: ', startCol, endCol, startRow, endRow);
+        const coords = partiallyInRange
+          .reduce((acc, cell) => {
+            const cellCoords = cell.getCellBorder();
+            acc.startCol = Math.min(acc.startCol, cellCoords.left)
+            acc.endCol = Math.max(acc.endCol, cellCoords.right)
+            acc.startRow = Math.min(acc.startRow, cellCoords.top)
+            acc.endRow = Math.max(acc.endRow, cellCoords.bottom)
+            return acc;
+          }, { startCol, endCol, startRow, endRow });
+          console.log('coords: ', coords);
+          setStartSelectedPosition({ rowIndex: coords.startRow, colIndex: coords.startCol });
+          setHoveredCellDataset({ rowIndex: coords.endRow, colIndex: coords.endCol });
       }
-      // console.log(cellsInRange);
-      // setGrid(recalculateGrid(selectedRange))
     }
   }, [hoveredCellDataset])
 
@@ -120,7 +131,6 @@ const App = ({ location }) => {
   const onMergeBtnClick = () => {
     const selectedRange = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
     setGrid(mergeCells(selectedRange));
-    console.log('selectedRange: ', selectedRange)
   }
 
   return (
@@ -136,8 +146,8 @@ const App = ({ location }) => {
               {gridRow.map((gridCell, colIndex) => (
                 <td
                   data-selected={gridCell.selected}
-                  data-row-index={rowIndex}
-                  data-col-index={colIndex}
+                  data-row-index={gridCell.rowIndex}
+                  data-col-index={gridCell.colIndex}
                   key={colIndex}
                   colSpan={gridCell.colSpan}
                   rowSpan={gridCell.rowSpan}
