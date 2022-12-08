@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import useOutsideClick from './hooks/useOutsideClick';
 import cloneDeep from 'lodash.clonedeep';
 import { Cell } from './models/cell';
+import { selection } from './models/selection';
 
 import './styles.css';
 
@@ -15,113 +16,59 @@ const formGrid = (height=0, width=0) => {
   return formRows;
 }
 
-const calculateSelectedRange = (startPos, endPos) => {
-  return {
-    startCol: Math.min(startPos.colIndex, endPos.colIndex),
-    endCol: Math.max(startPos.colIndex, endPos.colIndex),
-    startRow: Math.min(startPos.rowIndex, endPos.rowIndex),
-    endRow: Math.max(startPos.rowIndex, endPos.rowIndex),
-  }
-}
-
-const isCellInSelectedRange = (
-  { startCol, endCol, startRow, endRow },
-  { rowIdx, cellIdx }
-) => {
-  return startRow <= rowIdx && endRow >= rowIdx
-    && startCol <= cellIdx && endCol >= cellIdx;
-}
-
-const recalculateGrid = (selectedRange) => (grid) => {
-  return grid
-    .map((rows, rowIdx) => {
-      return rows.map((cellConfig, cellIdx) => {
-        return { ...cellConfig, selected: isCellInSelectedRange(selectedRange, {rowIdx, cellIdx}) }
-      })
-    })
-}
-
-const isUnitedCell = (rowIdx, startRow, cellIdx, startCol) => rowIdx === startRow && cellIdx === startCol;
-const mergeCells = ({ startCol, endCol, startRow, endRow }) => (grid) => {
-  const cell = grid[startRow][startCol];
-  cell.colSpan = endCol - startCol + 1;
-  cell.rowSpan = endRow - startRow + 1;
+const mergeCells = ({ minRow, minCol, maxRow, maxCol }) => (grid) => {
+  const expandedCell = grid[minRow][minCol];
+  expandedCell.colSpan = maxCol - minCol + 1;
+  expandedCell.rowSpan = maxRow - minRow + 1;
   const newGrid = grid.map(
-    (row, rowIdx) => row.filter((cell, cellIdx) => !cell.selected || isUnitedCell(rowIdx, startRow, cellIdx, startCol))
+    (cells) => cells.filter((cell) => !cell.selected || cell === expandedCell)
   )
   return newGrid;
-}
-////////////////////////////////////////////////////////////////////
-
-const getCellsInRange = ({ startCol, endCol, startRow, endRow }, grid) => {
-  return grid.reduce((acc, cells) => {
-    cells.forEach(cell => {
-      if (cell.isFullyInRange({ startCol, endCol, startRow, endRow })) {
-        acc.fullyInRange.push(cell)
-      } else if (cell.isPartiallyInRange({ startCol, endCol, startRow, endRow })) {
-        acc.partiallyInRange.push(cell)
-      }
-    });
-    return acc;
-  }, { fullyInRange: [], partiallyInRange: [] })
 }
 
 const App = ({ location }) => {
   const [grid, setGrid] = useState([['First cell']]);
   const { height = 0, width = 0 } = parse(location.search);
-  const [hoveredCellDataset, setHoveredCellDataset] = useState(null);
   const [isListenMouseMove, setIsListenMouseMove] = useState(false);
-  const [startSelectedPosition, setStartSelectedPosition] = useState(null);
   const ref = useRef();
-  useOutsideClick(ref, () => setIsListenMouseMove(false))
+  useOutsideClick(ref, () => setIsListenMouseMove(false));
+  const cleanSelection = (grid) => {
+    return grid.map(cells => cells.map(cell => {
+      cell.selected = false;
+      return cell;
+    }))
+  }
 
   useEffect(() => {
     const newGrid = formGrid(height, width);
     setGrid(newGrid)
   }, [height, width]);
-  useEffect(() => {
-    if (hoveredCellDataset) {
-      const { startCol, endCol, startRow, endRow } = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
-      const newGrid = cloneDeep(grid);
-      newGrid.forEach(row => {
-        row.forEach(cell => cell.selected = false)
-      })
-      const { fullyInRange, partiallyInRange } = getCellsInRange({ startCol, endCol, startRow, endRow }, newGrid);
-      if (!partiallyInRange.length) {
-        fullyInRange.forEach(cell => cell.selected = true)
-        setGrid(newGrid)
-      } else {
-        console.log('startedData: ', startCol, endCol, startRow, endRow);
-        const coords = partiallyInRange
-          .reduce((acc, cell) => {
-            const cellCoords = cell.getCellBorder();
-            acc.startCol = Math.min(acc.startCol, cellCoords.left)
-            acc.endCol = Math.max(acc.endCol, cellCoords.right)
-            acc.startRow = Math.min(acc.startRow, cellCoords.top)
-            acc.endRow = Math.max(acc.endRow, cellCoords.bottom)
-            return acc;
-          }, { startCol, endCol, startRow, endRow });
-          console.log('coords: ', coords);
-          setStartSelectedPosition({ rowIndex: coords.startRow, colIndex: coords.startCol });
-          setHoveredCellDataset({ rowIndex: coords.endRow, colIndex: coords.endCol });
-      }
-    }
-  }, [hoveredCellDataset])
+
+  const updateGrid = ({ rowIndex, colIndex }, target) => {
+    selection.currentElement = target;
+    selection.end = { rowIndex: +rowIndex, colIndex: +colIndex };
+    const cleanGrid = cleanSelection(grid);
+    const newGrid = cloneDeep(cleanGrid);
+    const cellsInRange = selection.expandPositions(newGrid);
+    cellsInRange.forEach(cell => cell.selected = true);
+    setGrid(newGrid);
+  }
 
   const handleMousedown = (event) => {
     setIsListenMouseMove(true);
-    const { rowIndex, colIndex }= event.target.dataset;
-    setStartSelectedPosition({ rowIndex, colIndex });
-    setHoveredCellDataset({ rowIndex, colIndex });
+    const { rowIndex, colIndex } = event.target.dataset;
+    selection.startPosition = { rowIndex: +rowIndex, colIndex: +colIndex };
+    updateGrid({ rowIndex: +rowIndex, colIndex: +colIndex }, event.target);
+  }
+
+  const handleMouseMove = (event) => {
+    if (!isListenMouseMove || selection.currentElement === event.target) return;
+    const { rowIndex, colIndex } = event.target.dataset;
+    updateGrid({ rowIndex: +rowIndex, colIndex: +colIndex }, event.target);
   }
 
   const handleMouseup = (event) => {
     setIsListenMouseMove(false);
-  }
-
-  const handleMouseMove = (event) => {
-    if (!isListenMouseMove) return;
-    setHoveredCellDataset(event.target.dataset);
   }
 
   const onSeparateBtnClick = () => {
@@ -129,7 +76,7 @@ const App = ({ location }) => {
   }
   
   const onMergeBtnClick = () => {
-    const selectedRange = calculateSelectedRange(startSelectedPosition, hoveredCellDataset);
+    const selectedRange = selection.normolizeSelectedRange(selection.startPosition, selection.endPosition);
     setGrid(mergeCells(selectedRange));
   }
 
